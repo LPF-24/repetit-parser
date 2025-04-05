@@ -11,6 +11,8 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 public class RepetitParser {
     static class TutorInfo {
@@ -19,14 +21,17 @@ public class RepetitParser {
         int age;
         String experience;
         boolean hasKeywords;
+        int reviews;
         String profileUrl;
 
-        public TutorInfo(String name, int price, int age, String experience, boolean hasKeywords, String profileUrl) {
+        public TutorInfo(String name, int price, int age, String experience, boolean hasKeywords, int reviews,
+                         String profileUrl) {
             this.name = name;
             this.price = price;
             this.age = age;
             this.experience = experience;
             this.hasKeywords = hasKeywords;
+            this.reviews = reviews;
             this.profileUrl = profileUrl;
         }
     }
@@ -68,33 +73,48 @@ public class RepetitParser {
                         }
                     }
 
+                    Element reviewsElement = profileDoc.selectFirst(".intro__reviews-count");
+                    int reviews = 0;
+                    if (reviewsElement != null) {
+                        String reviewsText = reviewsElement.text().replaceAll("[^0-9]", "");
+                        if (!reviewsText.isEmpty()) {
+                            reviews = Integer.parseInt(reviewsText);
+                            if (reviews < 29) continue;
+                        }
+                    }
+
                     Element nameElement = profileDoc.selectFirst("div.intro__name > h1[itemprop=name]");
                     String name = nameElement != null ? nameElement.text() : "-";
 
                     Element expElement = profileDoc.selectFirst("span.intro__experience-value");
                     String experience = expElement != null ? expElement.text() : "-";
 
-                    // Ищем цену за онлайн занятия
                     Elements priceBlocks = profileDoc.select(".price");
-                    for (Element price : priceBlocks) {
-                        Element title = price.selectFirst(".price__title");
-                        Element value = price.selectFirst(".price__value");
+                    Optional<Integer> onlinePrice = priceBlocks.stream()
+                            .map(block -> {
+                                Element title = block.selectFirst(".price__title");
+                                Element value = block.selectFirst(".price__value");
+                                if (title != null && value != null && title.text().toLowerCase().contains("онлайн")) {
+                                    String priceText = value.text().replaceAll("[^0-9]", "");
+                                    if (!priceText.isEmpty()) {
+                                        return Integer.parseInt(priceText);
+                                    }
+                                }
+                                return null;
+                            })
+                            .filter(Objects::nonNull)
+                            .findFirst();
 
-                        if (title != null && value != null && title.text().toLowerCase().contains("онлайн")) {
-                            String priceText = value.text().replaceAll("[^0-9]", "");
-                            if (!priceText.isEmpty()) {
-                                int parsedPrice = Integer.parseInt(priceText);
-
-                                tutors.add(new TutorInfo(
-                                        name,
-                                        parsedPrice,
-                                        age,
-                                        experience,
-                                        true,
-                                        profileUrl
-                                ));
-                            }
-                        }
+                    if (onlinePrice.isPresent()) {
+                        tutors.add(new TutorInfo(
+                                name,
+                                onlinePrice.get(),
+                                age,
+                                experience,
+                                true,
+                                reviews,
+                                profileUrl
+                        ));
                     }
                 } catch (Exception e) {
                     //TODO
@@ -104,15 +124,17 @@ public class RepetitParser {
         }
 
         for (TutorInfo tutor : tutors) {
-            System.out.printf("Name: %s | Price: %d | Age: %d | Experience: %s | Key words: %s | URL: %s%n",
-                    tutor.name, tutor.price, tutor.age, tutor.experience, tutor.hasKeywords ? "Yes" : "No", tutor.profileUrl);
+            System.out.printf("Name: %s | Price: %d | Age: %d | Experience: %s | Key words: %s | Reviews: %d | URL: %s%n",
+                    tutor.name, tutor.price, tutor.age, tutor.experience, tutor.hasKeywords ? "Yes" : "No",
+                    tutor.reviews, tutor.profileUrl);
         }
 
         try (PrintWriter writer = new PrintWriter(new FileWriter("tutors.csv"))) {
-            writer.println("Name,Price,Age,Experience,HasKeyWords,ProfileURL");
+            writer.println("Name,Price,Age,Experience,HasKeyWords,Reviews,ProfileURL");
             for (TutorInfo t : tutors) {
-                writer.printf("%s,%d,%d,%s,%s,%s%n",
-                        escapeCsv(t.name), t.price, t.age, escapeCsv(t.experience), t.hasKeywords ? "Yes" : "No", t.profileUrl);
+                writer.printf("%s,%d,%d,%s,%s,%d,%s%n",
+                        escapeCsv(t.name), t.price, t.age, escapeCsv(t.experience), t.hasKeywords ? "Yes" : "No",
+                        t.reviews, t.profileUrl);
             }
         }
 
