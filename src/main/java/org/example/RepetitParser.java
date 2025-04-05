@@ -48,10 +48,11 @@ public class RepetitParser {
     public static void main(String[] args) throws IOException, InterruptedException {
         ExecutorService executor = Executors.newFixedThreadPool(THREADS);
         List<Future<TutorInfo>> futures = new ArrayList<>();
+        long before = System.currentTimeMillis();
 
-        for (int page = 1; page <= 22; page++) {
+        for (int page = 50; page <= 100; page++) {
             String url = "https://repetit.ru/repetitors/angliyskiy-yazyk/?page=" + page;
-            Document doc = Jsoup.connect(url).userAgent(USER_AGENT).get();
+            Document doc = safeConnect(url);
             Elements cards = doc.select("a.teacher-card__name-link");
 
             for (Element card : cards) {
@@ -61,7 +62,9 @@ public class RepetitParser {
         }
 
         executor.shutdown();
-        executor.awaitTermination(30, TimeUnit.MINUTES);
+        if (!executor.awaitTermination(90, TimeUnit.MINUTES)) {
+            System.out.println("Время ожидания вышло — не все задачи успели завершиться");
+        }
 
         List<TutorInfo> tutors = new ArrayList<>();
         for (Future<TutorInfo> future : futures) {
@@ -93,6 +96,8 @@ public class RepetitParser {
 
         double average = tutors.stream().mapToInt(t -> t.price).average().orElse(0);
         System.out.println("Средняя цена за онлайн-занятие: " + (int) average + " рублей");
+        long after = System.currentTimeMillis();
+        System.out.println("Время, потраченное на обработку 50 страниц (в минутах): " + (after - before) / 60000);
     }
 
     private static TutorInfo processProfile(String profileUrl) {
@@ -153,6 +158,7 @@ public class RepetitParser {
                     .findFirst();
 
             if (onlinePrice.isEmpty()) return null;
+            if (onlinePrice.get() > 2500) return null; // Пропускаем дорогих
 
             return new TutorInfo(name, onlinePrice.get(), age, experience, true, reviews, profileUrl);
 
@@ -167,6 +173,25 @@ public class RepetitParser {
             return "\"" + value.replace("\"", "\"\"") + "\"";
         }
         return value;
+    }
+
+    private static Document safeConnect(String url) throws IOException {
+        int attempts = 0;
+        while (attempts < 3) {
+            try {
+                return Jsoup.connect(url)
+                        .userAgent(USER_AGENT)
+                        .timeout(10000)
+                        .get();
+            } catch (IOException e) {
+                attempts++;
+                if (attempts >= 3) throw e;
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {}
+            }
+        }
+        throw new IOException("Unreachable code");
     }
 }
 
