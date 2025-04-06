@@ -5,14 +5,13 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -41,16 +40,32 @@ public class RepetitParser {
         }
     }
 
+    private static final Logger logger = LoggerFactory.getLogger(RepetitParser.class);
     private static final List<String> KEYWORDS = List.of("говор", "общен", "speaking", "живой", "устный", "барьер");
     private static final int THREADS = 6; // Можно увеличить, но лучше не более 10 для бережной нагрузки
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36";
 
+    private static int minPrice;
+    private static int maxPrice;
+    private static int minAge;
+    private static int maxAge;
+
     public static void main(String[] args) throws IOException, InterruptedException {
+        Scanner scanner = new Scanner(System.in);
+        System.out.println("Минимальная цена: ");
+        minPrice = scanner.nextInt();
+        System.out.println("Максимальная цена: ");
+        maxPrice = scanner.nextInt();
+        System.out.println("Минимальный возраст: ");
+        minAge = scanner.nextInt();
+        System.out.println("Максимальный возраст: ");
+        maxAge = scanner.nextInt();
+
         ExecutorService executor = Executors.newFixedThreadPool(THREADS);
         List<Future<TutorInfo>> futures = new ArrayList<>();
         long before = System.currentTimeMillis();
 
-        for (int page = 50; page <= 100; page++) {
+        for (int page = 1; page <= 1225; page++) {
             String url = "https://repetit.ru/repetitors/angliyskiy-yazyk/?page=" + page;
             Document doc = safeConnect(url);
             Elements cards = doc.select("a.teacher-card__name-link");
@@ -63,7 +78,7 @@ public class RepetitParser {
 
         executor.shutdown();
         if (!executor.awaitTermination(90, TimeUnit.MINUTES)) {
-            System.out.println("Время ожидания вышло — не все задачи успели завершиться");
+            logger.warn("Время ожидания вышло — не все задачи успели завершиться");
         }
 
         List<TutorInfo> tutors = new ArrayList<>();
@@ -74,13 +89,13 @@ public class RepetitParser {
                     tutors.add(tutor);
                 }
             } catch (Exception e) {
-                System.out.println("Ошибка при получении результата: " + e.getMessage());
+                logger.error("Ошибка при получении результата: {}", e.getMessage());
             }
         }
 
         // Вывод результатов
         for (TutorInfo tutor : tutors) {
-            System.out.printf("Name: %s | Price: %d | Age: %d | Experience: %s | Key words: %s | Reviews: %d | URL: %s%n",
+            logger.info("Name: {} | Price: {} | Age: {} | Experience: {} | Key words: {} | Reviews: {} | URL: {}",
                     tutor.name, tutor.price, tutor.age, tutor.experience,
                     tutor.hasKeywords ? "Yes" : "No", tutor.reviews, tutor.profileUrl);
         }
@@ -95,9 +110,9 @@ public class RepetitParser {
         }
 
         double average = tutors.stream().mapToInt(t -> t.price).average().orElse(0);
-        System.out.println("Средняя цена за онлайн-занятие: " + (int) average + " рублей");
+        logger.info("Средняя цена за онлайн-занятие: {} рублей", (int) average);
         long after = System.currentTimeMillis();
-        System.out.println("Время, потраченное на обработку 50 страниц (в минутах): " + (after - before) / 60000);
+        logger.info("Время, потраченное на обработку (в минутах): {}", (after - before) / 60000);
     }
 
     private static TutorInfo processProfile(String profileUrl) {
@@ -121,7 +136,7 @@ public class RepetitParser {
                 String ageText = ageBlock.text().replaceAll("[^0-9]", "");
                 if (!ageText.isEmpty()) {
                     age = Integer.parseInt(ageText);
-                    if (age < 26) return null;
+                    if (age < minAge || age > maxAge) return null;
                 }
             }
 
@@ -155,15 +170,16 @@ public class RepetitParser {
                         return null;
                     })
                     .filter(Objects::nonNull)
+                    .filter(price -> price >= minPrice && price <= maxPrice)
                     .findFirst();
 
             if (onlinePrice.isEmpty()) return null;
-            if (onlinePrice.get() > 2500) return null; // Пропускаем дорогих
+            if (onlinePrice.get() > maxPrice) return null; // Пропускаем дорогих
 
             return new TutorInfo(name, onlinePrice.get(), age, experience, true, reviews, profileUrl);
 
         } catch (Exception e) {
-            System.out.println("Ошибка при обработке профиля: " + profileUrl);
+            logger.error("Ошибка при обработке профиля: {}", profileUrl);
             return null;
         }
     }
