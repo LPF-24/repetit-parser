@@ -52,13 +52,13 @@ public class RepetitParser {
 
     public static void main(String[] args) throws IOException, InterruptedException {
         Scanner scanner = new Scanner(System.in);
-        System.out.println("Минимальная цена: ");
+        System.out.println("Minimum price (in rubles): ");
         minPrice = scanner.nextInt();
-        System.out.println("Максимальная цена: ");
+        System.out.println("Maximum price (in rubles): ");
         maxPrice = scanner.nextInt();
-        System.out.println("Минимальный возраст: ");
+        System.out.println("Minimum age: ");
         minAge = scanner.nextInt();
-        System.out.println("Максимальный возраст: ");
+        System.out.println("Maximum age: ");
         maxAge = scanner.nextInt();
 
         ExecutorService executor = Executors.newFixedThreadPool(THREADS);
@@ -78,7 +78,7 @@ public class RepetitParser {
 
         executor.shutdown();
         if (!executor.awaitTermination(90, TimeUnit.MINUTES)) {
-            logger.warn("Время ожидания вышло — не все задачи успели завершиться");
+            logger.warn("Waiting time expired - not all tasks were completed");
         }
 
         List<TutorInfo> tutors = new ArrayList<>();
@@ -89,7 +89,7 @@ public class RepetitParser {
                     tutors.add(tutor);
                 }
             } catch (Exception e) {
-                logger.error("Ошибка при получении результата: {}", e.getMessage());
+                logger.error("Error while getting result: {}", e.getMessage());
             }
         }
 
@@ -110,9 +110,9 @@ public class RepetitParser {
         }
 
         double average = tutors.stream().mapToInt(t -> t.price).average().orElse(0);
-        logger.info("Средняя цена за онлайн-занятие: {} рублей", (int) average);
+        logger.info("Average price for an online lesson (in rubles): {} rubles", (int) average);
         long after = System.currentTimeMillis();
-        logger.info("Время, потраченное на обработку (в минутах): {}", (after - before) / 60000);
+        logger.info("Time spent on processing (in minutes): {}", (after - before) / 60000);
     }
 
     private static TutorInfo processProfile(String profileUrl) {
@@ -146,7 +146,7 @@ public class RepetitParser {
                 String reviewsText = reviewsElement.text().replaceAll("[^0-9]", "");
                 if (!reviewsText.isEmpty()) {
                     reviews = Integer.parseInt(reviewsText);
-                    if (reviews < 29) return null;
+                    if (reviews < 10) return null;
                 }
             }
 
@@ -179,7 +179,7 @@ public class RepetitParser {
             return new TutorInfo(name, onlinePrice.get(), age, experience, true, reviews, profileUrl);
 
         } catch (Exception e) {
-            logger.error("Ошибка при обработке профиля: {}", profileUrl);
+            logger.error("Error processing profile: {}", profileUrl);
             return null;
         }
     }
