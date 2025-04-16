@@ -6,6 +6,11 @@ Parser for searching tutors on the repetit.ru website according to specified cri
 - Java 17
 - jsoup HTML Parsing Library
 
+## 📦 Features
+
+- 🧩 possibility to regulate the price of the lesson
+- 🧾 saving results in csv
+
 ## 📌 Project Status
 
 ✅ Core functionality is complete.  
